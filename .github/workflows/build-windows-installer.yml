@@ -3,15 +3,14 @@ name: Build Windows Installer
 on:
   push:
     branches: [ main, master ]
-  workflow_dispatch:   # allow manual trigger
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: windows-latest
 
     env:
-      # Optional: silence the Node.js deprecation warning (not required, but cleans logs)
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true   # silence Node.js deprecation
 
     steps:
       - name: Check out repository
@@ -23,54 +22,28 @@ jobs:
           r-version: '4.5.2'
           use-public-rspm: true
           install-r: true
-          rtools-version: '2024'   # ensures build tools are available
+          rtools-version: '2024'
 
-      # --------------------------------------------------------------------
-      # Cache R packages (speeds up subsequent runs)
-      # --------------------------------------------------------------------
-      - name: Cache R packages
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.R_LIBS_USER }}
-          key: ${{ runner.os }}-r-${{ hashFiles('build_windows_installer.R') }}
-          restore-keys: |
-            ${{ runner.os }}-r-
-
-      # --------------------------------------------------------------------
-      # Install Inno Setup (required to compile the .exe)
-      # --------------------------------------------------------------------
       - name: Install Inno Setup
         run: |
           choco install innosetup -y
           echo "C:\Program Files (x86)\Inno Setup 6" >> $env:GITHUB_PATH
         shell: powershell
 
-      # --------------------------------------------------------------------
-      # Install all R package dependencies (including RInno’s dependencies)
-      # --------------------------------------------------------------------
-      - name: Install R packages
+      - name: Install R package dependencies
         shell: Rscript {0}
         run: |
-          # These are the packages your app uses + dependencies needed to install RInno
-          pkgs <- c(
+          install.packages(c(
             "shiny", "bslib", "DT", "DBI", "RSQLite", "magick", "base64enc",
             "httr", "jsonlite", "torch", "torchvision", "ggplot2", "plotly",
-            "shinycssloaders", "shinytoastr", "digest",
-            # RInno dependencies (required when installing from source)
-            "installr", "pkgbuild", "remotes"
-          )
-          install.packages(pkgs, repos = "https://cloud.r-project.org")
+            "shinycssloaders", "shinytoastr", "digest"
+            # RInno dependencies will be installed by the script
+          ), repos = "https://cloud.r-project.org")
 
-      # --------------------------------------------------------------------
-      # Run the build script (it will install RInno from GitHub zip)
-      # --------------------------------------------------------------------
       - name: Build the installer
         shell: Rscript {0}
         run: source("build_windows_installer.R")
 
-      # --------------------------------------------------------------------
-      # Upload the resulting .exe as a GitHub artifact
-      # --------------------------------------------------------------------
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
