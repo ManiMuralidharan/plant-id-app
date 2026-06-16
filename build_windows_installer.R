@@ -131,7 +131,17 @@ create_app(
 # -----------------------------------------------------------------------------
 # 5. Inject post-install libtorch download
 # -----------------------------------------------------------------------------
-iss_path <- file.path("installer_output", paste0(APP_NAME, ".iss"))
+message("Locating the generated .iss file...")
+iss_files <- list.files("installer_output", pattern = "\\.iss$", full.names = TRUE)
+
+if (length(iss_files) == 0) {
+  stop("Could not find any .iss file in the installer_output folder! Files present: ", 
+       paste(list.files("installer_output"), collapse = ", "))
+}
+
+iss_path <- iss_files[1]
+message("Found .iss file at: ", iss_path)
+
 iss_lines <- readLines(iss_path)
 run_idx <- grep("^\\[Run\\]", iss_lines)
 torch_line <- 'Filename: "{app}\\R-Portable\\bin\\Rscript.exe"; Parameters: "-e ""torch::install_torch()"""; StatusMsg: "Downloading neural network engine..."; Flags: runhidden waituntilterminated'
