@@ -11,11 +11,18 @@
 install_rinnno_from_github <- function() {
   message("Installing RInno from GitHub (zip download)...")
 
+  # First, ensure required dependencies are installed
+  deps <- c("installr", "pkgbuild", "remotes")
+  missing <- deps[!sapply(deps, requireNamespace, quietly = TRUE)]
+  if (length(missing)) {
+    message("Installing missing dependencies: ", paste(missing, collapse = ", "))
+    install.packages(missing, repos = "https://cloud.r-project.org")
+  }
+
   tmp_zip <- tempfile(fileext = ".zip")
   tmp_dir <- tempfile()
   dir.create(tmp_dir)
 
-  # GitHub default branch could be 'master' or 'main'
   branches <- c("master", "main")
   downloaded <- FALSE
   for (b in branches) {
@@ -28,22 +35,12 @@ install_rinnno_from_github <- function() {
   }
 
   if (!downloaded) {
-    stop(
-      "Could not download RInno from GitHub.\n",
-      "Manual fallback:\n",
-      "  1. Open https://github.com/ficonsulting/RInno\n",
-      "  2. Click Code → Download ZIP\n",
-      "  3. Unzip, then in R: install.packages('path/to/folder', repos = NULL, type = 'source')"
-    )
+    stop("Could not download RInno from GitHub. Check internet or manual fallback.")
   }
 
   unzip(tmp_zip, exdir = tmp_dir)
   pkg_folder <- list.dirs(tmp_dir, recursive = FALSE)[1]
   install.packages(pkg_folder, repos = NULL, type = "source")
-}
-
-if (!requireNamespace("RInno", quietly = TRUE)) {
-  install_rinnno_from_github()
 }
 library(RInno)
 
