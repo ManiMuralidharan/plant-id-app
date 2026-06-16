@@ -1,20 +1,46 @@
-# =============================================================================
-# build_windows_installer.R  (CI‑hardened version)
-#
-# Builds a Windows installer (.exe) using RInno, designed to run on
-# GitHub Actions (or any Windows machine). It installs RInno from CRAN,
-# auto‑detects the app file, copies it to app.R, and injects a post‑install
-# step to download libtorch (for torch).
-#
-# Run this on Windows, in the folder containing your Shiny app .R file.
-# =============================================================================
-
 # -----------------------------------------------------------------------------
-# 1. Install RInno from CRAN (no GitHub, no source compilation headaches)
+# 1. Install RInno – with CRAN fallback to GitHub zip (no Git needed)
 # -----------------------------------------------------------------------------
 if (!requireNamespace("RInno", quietly = TRUE)) {
-  message("Installing RInno from CRAN...")
-  install.packages("RInno", repos = "https://cloud.r-project.org")
+  message("Attempting to install RInno from CRAN...")
+  tryCatch({
+    install.packages("RInno", repos = "https://cloud.r-project.org")
+  }, error = function(e) { message("CRAN install failed: ", e$message) })
+
+  # If still not installed, fallback to GitHub zip download
+  if (!requireNamespace("RInno", quietly = TRUE)) {
+    message("Falling back to GitHub download (zip, no Git required)...")
+    tmp_zip <- tempfile(fileext = ".zip")
+    tmp_dir <- tempfile()
+    dir.create(tmp_dir)
+
+    # Try both possible default branches (master/main)
+    branches <- c("master", "main")
+    downloaded <- FALSE
+    for (b in branches) {
+      url <- sprintf("https://github.com/ficonsulting/RInno/archive/refs/heads/%s.zip", b)
+      ok <- tryCatch({
+        download.file(url, tmp_zip, mode = "wb", quiet = TRUE)
+        file.exists(tmp_zip) && file.info(tmp_zip)$size > 1000
+      }, error = function(e) FALSE, warning = function(w) FALSE)
+      if (isTRUE(ok)) { downloaded <- TRUE; break }
+    }
+
+    if (!downloaded) {
+      stop(
+        "Could not download RInno automatically.\n",
+        "Manual fallback:\n",
+        "  1. Open https://github.com/ficonsulting/RInno in a browser\n",
+        "  2. Click Code -> Download ZIP\n",
+        "  3. Unzip it, then in R run:\n",
+        "     install.packages('C:/path/to/unzipped/RInno-folder', repos = NULL, type = 'source')"
+      )
+    }
+
+    unzip(tmp_zip, exdir = tmp_dir)
+    pkg_folder <- list.dirs(tmp_dir, recursive = FALSE)[1]
+    install.packages(pkg_folder, repos = NULL, type = "source")
+  }
 }
 library(RInno)
 
