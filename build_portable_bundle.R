@@ -49,19 +49,39 @@ PACKAGES <- c(
   "shinycssloaders", "shinytoastr", "digest"
 )
 
+# FIXED: handles the "Permission denied" / "cannot remove prior installation"
+# pattern directly — this is a known Windows Defender file-lock race on
+# GitHub's windows-latest runners (a freshly-written DLL gets scanned right
+# as something tries to overwrite it). Removes any stale "00LOCK*" staging
+# folders left behind by an interrupted install, then retries with a short
+# backoff before giving up on a given package.
+install_with_retry <- function(pkgs, lib, repos, max_attempts = 3) {
+  remaining <- pkgs
+  for (attempt in seq_len(max_attempts)) {
+    lock_dirs <- list.dirs(lib, recursive = FALSE)
+    lock_dirs <- lock_dirs[grepl("^00LOCK", basename(lock_dirs))]
+    if (length(lock_dirs) > 0) {
+      message("Removing stale lock folder(s): ", paste(basename(lock_dirs), collapse = ", "))
+      unlink(lock_dirs, recursive = TRUE, force = TRUE)
+    }
+
+    message("Install attempt ", attempt, "/", max_attempts, " for: ", paste(remaining, collapse = ", "))
+    install.packages(remaining, lib = lib, repos = repos, type = "binary", dependencies = TRUE)
+
+    remaining <- remaining[!sapply(remaining, function(p) requireNamespace(p, lib.loc = lib, quietly = TRUE))]
+    if (length(remaining) == 0) return(character(0))
+
+    if (attempt < max_attempts) {
+      message(length(remaining), " package(s) still missing (", paste(remaining, collapse = ", "),
+              "). Waiting 10s for any file locks to clear before retrying...")
+      Sys.sleep(10)
+    }
+  }
+  remaining
+}
+
 message("Installing ", length(PACKAGES), " packages into the portable library (this is the slow step — ggplot2/plotly/torch pull in a fair number of dependencies)...")
-
-# FIXED: type = "binary" forces precompiled Windows binaries rather than
-# letting R choose — rules out a compiler/Rtools issue as the cause if any
-# of these (RSQLite, bslib's sass dependency, and ggplot2/plotly's heavier
-# dependency trees all contain packages with compiled C/C++ code) needed to
-# build from source instead of using a ready-made binary.
-install.packages(PACKAGES, lib = LIB_DEST, repos = "https://cloud.r-project.org",
-                  type = "binary", dependencies = TRUE)
-
-still_missing <- PACKAGES[!sapply(PACKAGES, function(p) {
-  requireNamespace(p, lib.loc = LIB_DEST, quietly = TRUE)
-})]
+still_missing <- install_with_retry(PACKAGES, LIB_DEST, "https://cloud.r-project.org")
 
 if (length(still_missing) > 0) {
   # FIXED: instead of just naming the failed packages, actually retry each
