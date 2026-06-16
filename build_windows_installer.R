@@ -54,7 +54,31 @@ if (!requireNamespace("RInno", quietly = TRUE)) {
 
   unzip(tmp_zip, exdir = tmp_dir)
   pkg_folder <- list.dirs(tmp_dir, recursive = FALSE)[1]
+
+  # FIXED: RInno's own DESCRIPTION file lists these as required Imports
+  # (curl, glue, httr, installr, jsonlite, magrittr, pkgbuild, remotes,
+  # rmarkdown, stringr). Installing from a local folder with repos = NULL
+  # can't fetch missing dependencies automatically, so without this step
+  # the install silently fails and the next line — library(RInno) — then
+  # throws "there is no package called 'RInno'", which is exactly what
+  # was happening here.
+  rinno_deps <- c("curl", "glue", "httr", "installr", "jsonlite", "magrittr",
+                   "pkgbuild", "remotes", "rmarkdown", "stringr")
+  missing_deps <- rinno_deps[!sapply(rinno_deps, requireNamespace, quietly = TRUE)]
+  if (length(missing_deps) > 0) {
+    message("Installing RInno's dependencies: ", paste(missing_deps, collapse = ", "))
+    install.packages(missing_deps, repos = "https://cloud.r-project.org")
+  }
+
   install.packages(pkg_folder, repos = NULL, type = "source")
+
+  if (!requireNamespace("RInno", quietly = TRUE)) {
+    stop(
+      "RInno still didn't install correctly even after installing its ",
+      "dependencies. Run install.packages('", pkg_folder, "', repos = NULL, ",
+      "type = 'source') manually and read the full error output above this line."
+    )
+  }
 }
 library(RInno)
 
