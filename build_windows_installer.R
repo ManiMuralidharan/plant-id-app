@@ -58,7 +58,7 @@ for (f in c("code_section", "get_R")) {
   # Reassemble and inject back into the RInno package memory
   body(fn) <- as.call(parse(text = paste(b, collapse = "\n"))[[1]])
   assignInNamespace(f, fn, ns = "RInno")
-
+}
 
 # -----------------------------------------------------------------------------
 # 3. Setup directories and locate app.R
@@ -92,7 +92,7 @@ APP_NAME    <- "Plant Identification AI"
 APP_VERSION <- "1.0.0"
 
 # Use a version that definitely exists on CRAN
-R_VER <- "4.4.0"   # <-- change this to any available version
+R_VER <- "4.4.0" 
 message("Bundling R version: ", R_VER)
 
 PACKAGES <- c("shiny", "bslib", "DT", "DBI", "RSQLite", "magick", "base64enc",
@@ -100,7 +100,7 @@ PACKAGES <- c("shiny", "bslib", "DT", "DBI", "RSQLite", "magick", "base64enc",
               "shinycssloaders", "shinytoastr", "digest")
 
 # -----------------------------------------------------------------------------
-# 5. Create Inno Setup script (no patch needed – download works)
+# 5. Create Inno Setup script
 # -----------------------------------------------------------------------------
 create_app(
   app_name    = APP_NAME,
@@ -115,11 +115,11 @@ create_app(
 )
 
 # -----------------------------------------------------------------------------
-# 6. Inject post‑install libtorch download into the .iss file
+# 6. Inject post-install libtorch download into the .iss file
 # -----------------------------------------------------------------------------
 iss_files <- list.files("installer_output", pattern = "\\.iss$", full.names = TRUE)
 if (length(iss_files) == 0) {
-  stop("No .iss file generated! Check create_app output.")
+  stop("Could not find any .iss file generated! Check create_app output.")
 }
 iss_path <- iss_files[1]
 message("Found .iss file: ", iss_path)
