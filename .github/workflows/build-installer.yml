@@ -19,7 +19,7 @@ jobs:
           r-version: '4.5.2'
           use-public-rspm: true
           install-r: true
-          rtools-version: '2024'
+          rtools-version: '2024'   # optional, but safe
 
       - name: Install Inno Setup
         run: |
@@ -27,10 +27,9 @@ jobs:
           echo "C:\Program Files (x86)\Inno Setup 6" >> $env:GITHUB_PATH
         shell: powershell
 
-      - name: Install R package dependencies (only those needed for build)
+      - name: Install other R packages (pre‑install for speed)
         shell: Rscript {0}
         run: |
-          # The script itself installs RInno, but we pre‑install other heavy deps
           install.packages(c(
             "shiny", "bslib", "DT", "DBI", "RSQLite", "magick", "base64enc",
             "httr", "jsonlite", "torch", "torchvision", "ggplot2", "plotly",
