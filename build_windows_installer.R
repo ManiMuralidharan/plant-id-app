@@ -5,7 +5,7 @@
 # -----------------------------------------------------------------------------
 # 1. Install RInno dependencies and RInno itself
 # -----------------------------------------------------------------------------
-install_rinnno_from_github <- function() {
+install_rinno_from_github <- function() {
   message("Installing RInno from GitHub (zip download)...")
 
   # Ensure required dependencies are installed
