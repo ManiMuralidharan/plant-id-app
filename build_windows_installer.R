@@ -1,5 +1,5 @@
 # =============================================================================
-# build_windows_installer.R – RELIABLE VERSION (fixed R version)
+# build_windows_installer.R – RELIABLE VERSION
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -42,23 +42,39 @@ install_rinno_from_github()
 library(RInno)
 
 # -----------------------------------------------------------------------------
-# 2. Fix the HTML scraping bug in RInno for R 4.x
+# 2. Patch RInno for R 4.x Scraper AND Archive Downloading
 # -----------------------------------------------------------------------------
-message("Applying RInno HTML scraping patch...")
-for (f in c("code_section", "get_R")) {
-  fn <- getFromNamespace(f, "RInno")
-  b <- deparse(body(fn))
+message("Applying RInno patches...")
+
+# Patch A: Fix HTML Scraper to prevent length-zero crashes
+fn_code <- getFromNamespace("code_section", "RInno")
+b <- deparse(body(fn_code))
+b <- gsub("\\[1-3\\]", "[1-9]", b)
+b <- gsub("latest_R_version == R_version", "isTRUE(latest_R_version[1] == R_version)", b)
+body(fn_code) <- as.call(parse(text = paste(b, collapse = "\n"))[[1]])
+assignInNamespace("code_section", fn_code, ns = "RInno")
+
+# Patch B: Fix get_R to handle 404s by checking the CRAN archive
+fn_getR <- getFromNamespace("get_R", "RInno")
+body(fn_getR) <- quote({
+  clean_R_ver <- gsub("[^0-9.]", "", R_version)
+  exe_name <- paste0("R-", clean_R_ver, "-win.exe")
+  url_main <- paste0("https://cloud.r-project.org/bin/windows/base/", exe_name)
+  url_archive <- paste0("https://cloud.r-project.org/bin/windows/base/old/", clean_R_ver, "/", exe_name)
+  dest <- file.path(app_dir, exe_name)
   
-  # 1. Update the hardcoded regex to support modern R versions
-  b <- gsub("\\[1-3\\]", "[1-9]", b)
+  message("Downloading ", exe_name, " from CRAN...")
+  res <- try(download.file(url_main, dest, mode = "wb", quiet = TRUE), silent = TRUE)
   
-  # 2. Fix the length zero crash by forcing a safe TRUE/FALSE evaluation
-  b <- gsub("latest_R_version == R_version", "isTRUE(latest_R_version[1] == R_version)", b)
-  
-  # Reassemble and inject back into the RInno package memory
-  body(fn) <- as.call(parse(text = paste(b, collapse = "\n"))[[1]])
-  assignInNamespace(f, fn, ns = "RInno")
-}
+  if (inherits(res, "try-error") || res != 0) {
+    message("Not on main page. Trying CRAN archive...")
+    res2 <- try(download.file(url_archive, dest, mode = "wb", quiet = TRUE), silent = TRUE)
+    if (inherits(res2, "try-error") || res2 != 0) {
+      stop("Could not download R-", clean_R_ver, " from CRAN or the archive.")
+    }
+  }
+})
+assignInNamespace("get_R", fn_getR, ns = "RInno")
 
 # -----------------------------------------------------------------------------
 # 3. Setup directories and locate app.R
