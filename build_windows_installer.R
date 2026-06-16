@@ -66,11 +66,18 @@ patch_rinno <- function() {
     dest <- file.path(app_dir, exe_name)
     
     message("Downloading ", exe_name, " from CRAN...")
-    res <- suppressWarnings(download.file(url_main, dest, mode = "wb", quiet = TRUE))
     
-    if (res != 0) {
+    # Wrap in try() so a 404 error doesn't crash the entire script
+    res <- try(download.file(url_main, dest, mode = "wb", quiet = TRUE), silent = TRUE)
+    
+    # If the main URL failed, try the archive URL
+    if (inherits(res, "try-error") || res != 0) {
       message("Trying CRAN archive...")
-      download.file(url_archive, dest, mode = "wb", quiet = TRUE)
+      res2 <- try(download.file(url_archive, dest, mode = "wb", quiet = TRUE), silent = TRUE)
+      
+      if (inherits(res2, "try-error") || res2 != 0) {
+        stop("Could not download R-", clean_R_ver, " from CRAN or the archive.")
+      }
     }
   })
   assignInNamespace("get_R", fn_getR, ns = "RInno")
