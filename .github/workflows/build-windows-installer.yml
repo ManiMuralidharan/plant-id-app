@@ -22,7 +22,7 @@ jobs:
           r-version: '4.5.2'
           use-public-rspm: true
           install-r: true
-          rtools-version: '2024'
+          rtools-version: '45'
 
       - name: Install Inno Setup
         run: |
