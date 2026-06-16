@@ -25,6 +25,14 @@ jobs:
         with:
           r-version: '4.5.2'
 
+      - name: Exclude workspace from Windows Defender scanning
+        # This is a well-known cause of "Permission denied" / "cannot remove
+        # prior installation" errors during R package installs on GitHub's
+        # windows-latest runners: Defender's real-time scanner locks freshly
+        # written DLLs right as another process tries to overwrite them.
+        shell: powershell
+        run: Add-MpPreference -ExclusionPath "${{ github.workspace }}"
+
       - name: Build the portable bundle
         shell: Rscript {0}
         run: source("build_portable_bundle.R")
