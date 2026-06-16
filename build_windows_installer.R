@@ -1,5 +1,5 @@
 # =============================================================================
-# build_windows_installer.R – RELIABLE VERSION
+# build_windows_installer.R – FINAL (copy existing R, no download)
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -36,17 +36,16 @@ install_rinno_from_github <- function() {
   install.packages(pkg_folder, repos = NULL, type = "source")
 }
 
-# Ensure RInno is installed
 if ("RInno" %in% installed.packages()[, "Package"]) remove.packages("RInno")
 install_rinno_from_github()
 library(RInno)
 
 # -----------------------------------------------------------------------------
-# 2. Patch RInno for R 4.x Scraper AND Archive Downloading
+# 2. Patch RInno: fix HTML scraping AND replace get_R with copy function
 # -----------------------------------------------------------------------------
-message("Applying RInno patches...")
+message("Applying patches to RInno...")
 
-# Patch A: Fix HTML Scraper to prevent length-zero crashes
+# Patch code_section (as before)
 fn_code <- getFromNamespace("code_section", "RInno")
 b <- deparse(body(fn_code))
 b <- gsub("\\[1-3\\]", "[1-9]", b)
@@ -54,26 +53,30 @@ b <- gsub("latest_R_version == R_version", "isTRUE(latest_R_version[1] == R_vers
 body(fn_code) <- as.call(parse(text = paste(b, collapse = "\n"))[[1]])
 assignInNamespace("code_section", fn_code, ns = "RInno")
 
-# Patch B: Fix get_R to handle 404s by checking the CRAN archive
-fn_getR <- getFromNamespace("get_R", "RInno")
-body(fn_getR) <- quote({
-  clean_R_ver <- gsub("[^0-9.]", "", R_version)
-  exe_name <- paste0("R-", clean_R_ver, "-win.exe")
-  url_main <- paste0("https://cloud.r-project.org/bin/windows/base/", exe_name)
-  url_archive <- paste0("https://cloud.r-project.org/bin/windows/base/old/", clean_R_ver, "/", exe_name)
-  dest <- file.path(app_dir, exe_name)
-  
-  message("Downloading ", exe_name, " from CRAN...")
-  res <- try(download.file(url_main, dest, mode = "wb", quiet = TRUE), silent = TRUE)
-  
-  if (inherits(res, "try-error") || res != 0) {
-    message("Not on main page. Trying CRAN archive...")
-    res2 <- try(download.file(url_archive, dest, mode = "wb", quiet = TRUE), silent = TRUE)
-    if (inherits(res2, "try-error") || res2 != 0) {
-      stop("Could not download R-", clean_R_ver, " from CRAN or the archive.")
+# Replace get_R with a function that copies the existing R installation
+fn_getR <- function(app_dir, R_version) {
+  dest <- file.path(app_dir, "R-Portable")
+  if (!dir.exists(dest)) {
+    message("Copying R from ", R.home(), " to ", dest)
+    if (Sys.info()["sysname"] == "Windows") {
+      # Use robocopy for fast, reliable copy
+      cmd <- sprintf("robocopy %s %s /E /COPY:DAT /R:0 /W:0",
+                     shQuote(R.home()), shQuote(dest))
+      res <- system(cmd, wait = TRUE, ignore.stdout = TRUE, ignore.stderr = TRUE)
+      if (res >= 8) {
+        warning("robocopy returned code ", res, " – copy may have failed.")
+      }
+    } else {
+      file.copy(R.home(), dest, recursive = TRUE, copy.date = TRUE)
     }
+    message("R copied successfully.")
+  } else {
+    message("R-Portable already exists, skipping copy.")
   }
-})
+  # Return TRUE to signal success (RInno expects a logical)
+  return(TRUE)
+}
+# Force the override
 assignInNamespace("get_R", fn_getR, ns = "RInno")
 
 # -----------------------------------------------------------------------------
@@ -102,14 +105,11 @@ if (length(candidates) == 0) {
 }
 
 # -----------------------------------------------------------------------------
-# 4. Configuration – USE A KNOWN STABLE R VERSION
+# 4. Configuration – R_version is now irrelevant (get_R overridden)
 # -----------------------------------------------------------------------------
 APP_NAME    <- "Plant Identification AI"
 APP_VERSION <- "1.0.0"
-
-# Use a version that definitely exists on CRAN
-R_VER <- "4.4.0" 
-message("Bundling R version: ", R_VER)
+R_VER       <- "4.4.0"   # dummy, will be ignored
 
 PACKAGES <- c("shiny", "bslib", "DT", "DBI", "RSQLite", "magick", "base64enc",
               "httr", "jsonlite", "torch", "torchvision", "ggplot2", "plotly",
@@ -131,11 +131,12 @@ create_app(
 )
 
 # -----------------------------------------------------------------------------
-# 6. Inject post-install libtorch download into the .iss file
+# 6. Inject post‑install libtorch download into the .iss file
 # -----------------------------------------------------------------------------
 iss_files <- list.files("installer_output", pattern = "\\.iss$", full.names = TRUE)
 if (length(iss_files) == 0) {
-  stop("Could not find any .iss file generated! Check create_app output.")
+  stop("No .iss file generated! Contents of installer_output:\n",
+       paste(list.files("installer_output", full.names = TRUE), collapse = "\n"))
 }
 iss_path <- iss_files[1]
 message("Found .iss file: ", iss_path)
@@ -161,4 +162,6 @@ compile_iss(iss_path = iss_path)
 
 message("\n==============================================")
 message("Build complete: installer_output/", APP_NAME, "_", APP_VERSION, ".exe")
+message("The installer will copy the current R (", R.version.string, ") and")
+message("download libtorch on first run (requires internet).")
 message("==============================================")
