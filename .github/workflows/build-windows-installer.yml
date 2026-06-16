@@ -1,4 +1,11 @@
-name: Build Windows Installer
+- name: Build the installer
+        shell: Rscript {0}
+        run: |
+          # Explicitly set to the workspace root
+          setwd("${{ github.workspace }}")
+          message("Current directory: ", getwd())
+          message("Files in directory: ", paste(list.files(), collapse = ", "))
+          source("build_windows_installer.R")
 
 on:
   push:
