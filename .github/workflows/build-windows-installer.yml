@@ -1,11 +1,4 @@
-- name: Build the installer
-        shell: Rscript {0}
-        run: |
-          # Explicitly set to the workspace root
-          setwd("${{ github.workspace }}")
-          message("Current directory: ", getwd())
-          message("Files in directory: ", paste(list.files(), collapse = ", "))
-          source("build_windows_installer.R")
+name: Build Windows Installer
 
 on:
   push:
@@ -44,12 +37,16 @@ jobs:
             "shiny", "bslib", "DT", "DBI", "RSQLite", "magick", "base64enc",
             "httr", "jsonlite", "torch", "torchvision", "ggplot2", "plotly",
             "shinycssloaders", "shinytoastr", "digest"
-            # RInno dependencies will be installed by the script
           ), repos = "https://cloud.r-project.org")
 
       - name: Build the installer
         shell: Rscript {0}
-        run: source("build_windows_installer.R")
+        run: |
+          # Explicitly set to the workspace root
+          setwd("${{ github.workspace }}")
+          message("Current directory: ", getwd())
+          message("Files in directory: ", paste(list.files(), collapse = ", "))
+          source("build_windows_installer.R")
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
