@@ -100,7 +100,12 @@ get_script_dir <- function() {
   getwd()
 }
 
-APP_DIR <- get_script_dir()
+# If running on GitHub Actions, force it to use the cloned repository folder
+if (Sys.getenv("GITHUB_WORKSPACE") != "") {
+  APP_DIR <- Sys.getenv("GITHUB_WORKSPACE")
+} else {
+  APP_DIR <- get_script_dir()
+}
 message("Working directory detected as: ", APP_DIR)
 
 # Find the Shiny app file: any .R file in this folder that isn't this script
