@@ -63,8 +63,15 @@ if (length(candidates) == 0) {
   # Use the first one found
   source_file <- candidates[1]
   message("Found app file at: ", source_file)
-  file.copy(source_file, file.path(APP_DIR, "app.R"), overwrite = TRUE)
-  message("Successfully copied to app.R in the root directory.")
+  
+  # Only copy the file if it isn't ALREADY the target app.R file
+  target_file <- file.path(APP_DIR, "app.R")
+  if (normalizePath(source_file, winslash="/", mustWork=FALSE) != normalizePath(target_file, winslash="/", mustWork=FALSE)) {
+    file.copy(source_file, target_file, overwrite = TRUE)
+    message("Successfully copied to app.R in the root directory.")
+  } else {
+    message("App file is already named app.R in the correct location. Skipping copy.")
+  }
 }
 
 # -----------------------------------------------------------------------------
