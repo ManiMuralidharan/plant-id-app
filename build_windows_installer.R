@@ -1,17 +1,14 @@
 # =============================================================================
-# build_windows_installer.R  (CI‑hardened, RInno from GitHub zip)
-#
-# Builds a Windows installer for a Shiny app using RInno.
-# Works on GitHub Actions (Windows runner) with no extra Git dependencies.
+# build_windows_installer.R  (CI‑hardened, always installs RInno from GitHub)
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# 1. Install RInno directly from GitHub (no CRAN, no Git binary required)
+# 1. Install RInno dependencies and RInno itself
 # -----------------------------------------------------------------------------
 install_rinnno_from_github <- function() {
   message("Installing RInno from GitHub (zip download)...")
 
-  # First, ensure required dependencies are installed
+  # Ensure required dependencies are installed
   deps <- c("installr", "pkgbuild", "remotes")
   missing <- deps[!sapply(deps, requireNamespace, quietly = TRUE)]
   if (length(missing)) {
@@ -28,9 +25,10 @@ install_rinnno_from_github <- function() {
   for (b in branches) {
     url <- sprintf("https://github.com/ficonsulting/RInno/archive/refs/heads/%s.zip", b)
     ok <- tryCatch({
-      download.file(url, tmp_zip, mode = "wb", quiet = TRUE)
+      download.file(url, tmp_zip, mode = "wb", quiet = FALSE)  # be verbose
       file.exists(tmp_zip) && file.info(tmp_zip)$size > 1000
-    }, error = function(e) FALSE, warning = function(w) FALSE)
+    }, error = function(e) { message("Download error: ", e$message); FALSE },
+       warning = function(w) { message("Download warning: ", w$message); FALSE })
     if (isTRUE(ok)) { downloaded <- TRUE; break }
   }
 
@@ -40,12 +38,27 @@ install_rinnno_from_github <- function() {
 
   unzip(tmp_zip, exdir = tmp_dir)
   pkg_folder <- list.dirs(tmp_dir, recursive = FALSE)[1]
+  message("Installing RInno from: ", pkg_folder)
   install.packages(pkg_folder, repos = NULL, type = "source")
+}
+
+# Always install RInno (overwrites any existing)
+message("Ensuring RInno is installed...")
+# Remove any existing RInno to avoid conflicts
+if ("RInno" %in% installed.packages()[, "Package"]) {
+  message("Removing existing RInno package...")
+  remove.packages("RInno")
+}
+install_rinnno_from_github()
+
+# Verify installation
+if (!requireNamespace("RInno", quietly = TRUE)) {
+  stop("RInno installation failed. Check previous messages.")
 }
 library(RInno)
 
 # -----------------------------------------------------------------------------
-# 2. Auto‑detect script directory and app file
+# 2. Auto‑detect script directory and app file (unchanged)
 # -----------------------------------------------------------------------------
 get_script_dir <- function() {
   cmd_args <- commandArgs(trailingOnly = FALSE)
@@ -151,7 +164,6 @@ writeLines(iss_lines, iss_path)
 # -----------------------------------------------------------------------------
 # Ensure Inno Setup compiler is in PATH
 if (nchar(Sys.which("iscc")) == 0) {
-  # Common installation paths
   paths <- c("C:/Program Files (x86)/Inno Setup 6",
              "C:/Program Files/Inno Setup 6")
   for (p in paths) {
