@@ -79,7 +79,11 @@ if (length(candidates) == 0) {
 # -----------------------------------------------------------------------------
 APP_NAME    <- "Plant Identification AI"
 APP_VERSION <- "1.0.0"
-R_VER       <- paste(R.version$major, strsplit(R.version$minor, "\\.")[[1]][1], sep = ".")
+
+# FIXED: Capture the exact, full R version (e.g., "4.5.2") so CRAN doesn't 404
+R_VER       <- paste(R.version$major, R.version$minor, sep = ".")
+message("Bundling R version: ", R_VER)
+
 PACKAGES    <- c("shiny", "bslib", "DT", "DBI", "RSQLite", "magick", "base64enc",
                  "httr", "jsonlite", "torch", "torchvision", "ggplot2", "plotly",
                  "shinycssloaders", "shinytoastr", "digest")
