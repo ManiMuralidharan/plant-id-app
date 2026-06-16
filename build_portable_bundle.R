@@ -50,15 +50,60 @@ PACKAGES <- c(
 )
 
 message("Installing ", length(PACKAGES), " packages into the portable library (this is the slow step — ggplot2/plotly/torch pull in a fair number of dependencies)...")
-install.packages(PACKAGES, lib = LIB_DEST, repos = "https://cloud.r-project.org")
+
+# FIXED: type = "binary" forces precompiled Windows binaries rather than
+# letting R choose — rules out a compiler/Rtools issue as the cause if any
+# of these (RSQLite, bslib's sass dependency, and ggplot2/plotly's heavier
+# dependency trees all contain packages with compiled C/C++ code) needed to
+# build from source instead of using a ready-made binary.
+install.packages(PACKAGES, lib = LIB_DEST, repos = "https://cloud.r-project.org",
+                  type = "binary", dependencies = TRUE)
 
 still_missing <- PACKAGES[!sapply(PACKAGES, function(p) {
   requireNamespace(p, lib.loc = LIB_DEST, quietly = TRUE)
 })]
+
 if (length(still_missing) > 0) {
-  stop("These packages failed to install into the portable library: ",
-       paste(still_missing, collapse = ", "),
-       "\nCheck the install.packages() output above this line for the real error.")
+  # FIXED: instead of just naming the failed packages, actually retry each
+  # one individually with output captured, so the REAL error is printed
+  # directly in this script's own failure message — no more needing to
+  # scroll back through a long log to find it.
+  message("\n", length(still_missing), " package(s) still missing — retrying individually to capture the exact error for each...\n")
+
+  diagnostics <- character(0)
+  for (p in still_missing) {
+    msg <- tryCatch({
+      withCallingHandlers(
+        install.packages(p, lib = LIB_DEST, repos = "https://cloud.r-project.org", type = "binary"),
+        warning = function(w) {
+          diagnostics[[length(diagnostics) + 1]] <<- sprintf("[%s] WARNING: %s", p, conditionMessage(w))
+          invokeRestart("muffleWarning")
+        }
+      )
+      if (requireNamespace(p, lib.loc = LIB_DEST, quietly = TRUE)) {
+        sprintf("[%s] OK on retry", p)
+      } else {
+        sprintf("[%s] Still failed after retry — no error/warning was raised, which usually means the binary isn't available for this R version/platform combination.", p)
+      }
+    }, error = function(e) {
+      sprintf("[%s] ERROR: %s", p, conditionMessage(e))
+    })
+    diagnostics <- c(diagnostics, msg)
+  }
+
+  still_missing_after_retry <- still_missing[!sapply(still_missing, function(p) {
+    requireNamespace(p, lib.loc = LIB_DEST, quietly = TRUE)
+  })]
+
+  if (length(still_missing_after_retry) > 0) {
+    stop(
+      "These packages failed to install into the portable library even after a retry:\n",
+      paste(diagnostics, collapse = "\n"),
+      "\n\nStill missing: ", paste(still_missing_after_retry, collapse = ", ")
+    )
+  } else {
+    message("All packages installed successfully on retry.")
+  }
 }
 message("All ", length(PACKAGES), " packages installed and verified.")
 
