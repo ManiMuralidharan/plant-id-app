@@ -57,9 +57,12 @@ patch_rinno <- function() {
   # 2. Entirely replace get_R to fix the 404 download crashes
   fn_getR <- getFromNamespace("get_R", "RInno")
   body(fn_getR) <- quote({
-    exe_name <- paste0("R-", R_version, "-win.exe")
+    # STRIP OUT ANY >= OR <= SIGNS THAT RINNO SNEAKS IN
+    clean_R_ver <- gsub("[^0-9.]", "", R_version)
+    
+    exe_name <- paste0("R-", clean_R_ver, "-win.exe")
     url_main <- paste0("https://cloud.r-project.org/bin/windows/base/", exe_name)
-    url_archive <- paste0("https://cloud.r-project.org/bin/windows/base/old/", R_version, "/", exe_name)
+    url_archive <- paste0("https://cloud.r-project.org/bin/windows/base/old/", clean_R_ver, "/", exe_name)
     dest <- file.path(app_dir, exe_name)
     
     message("Downloading ", exe_name, " from CRAN...")
@@ -113,7 +116,6 @@ if (length(candidates) == 0) {
 APP_NAME    <- "Plant Identification AI"
 APP_VERSION <- "1.0.0"
 
-# FIXED: Capture the exact, full R version (e.g., "4.5.2") so CRAN doesn't 404
 R_VER       <- paste(R.version$major, R.version$minor, sep = ".")
 message("Bundling R version: ", R_VER)
 
