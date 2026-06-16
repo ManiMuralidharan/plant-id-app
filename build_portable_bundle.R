@@ -42,90 +42,77 @@ if (.Platform$OS.type == "windows") {
 }
 message("R copied successfully.")
 
-# ── 2. Install every required package directly into the portable library ────
+# ── 2. Install into a clean staging library, then copy into the final one ───
+# FIXED: installing directly into LIB_DEST (which already has whatever
+# robocopy brought over, plus dependency-resolution overlaps like shiny->bslib
+# and plotly->ggplot2 being both directly requested AND pulled in as a
+# dependency) means install.packages() sometimes thinks it needs to "remove a
+# prior installation" — and THAT specific code path is where the Windows
+# lock/permission errors keep happening, even with the Defender exclusion in
+# place. Installing into a totally empty staging folder first means every
+# package takes the simple "fresh install" path (nothing to remove, nothing
+# to back up/restore), which eliminates this entire class of error rather
+# than retrying into it. The staged packages are then copied into the real
+# library with a plain file copy, which has no package-replacement dance to
+# collide with.
 PACKAGES <- c(
   "shiny", "bslib", "DT", "DBI", "RSQLite", "magick", "base64enc",
   "httr", "jsonlite", "torch", "torchvision", "ggplot2", "plotly",
   "shinycssloaders", "shinytoastr", "digest"
 )
 
-# FIXED: handles the "Permission denied" / "cannot remove prior installation"
-# pattern directly — this is a known Windows Defender file-lock race on
-# GitHub's windows-latest runners (a freshly-written DLL gets scanned right
-# as something tries to overwrite it). Removes any stale "00LOCK*" staging
-# folders left behind by an interrupted install, then retries with a short
-# backoff before giving up on a given package.
-install_with_retry <- function(pkgs, lib, repos, max_attempts = 3) {
-  remaining <- pkgs
-  for (attempt in seq_len(max_attempts)) {
-    lock_dirs <- list.dirs(lib, recursive = FALSE)
-    lock_dirs <- lock_dirs[grepl("^00LOCK", basename(lock_dirs))]
-    if (length(lock_dirs) > 0) {
-      message("Removing stale lock folder(s): ", paste(basename(lock_dirs), collapse = ", "))
-      unlink(lock_dirs, recursive = TRUE, force = TRUE)
-    }
+STAGING_LIB <- file.path(APP_DIR, "staging_library")
+if (dir.exists(STAGING_LIB)) unlink(STAGING_LIB, recursive = TRUE)
+dir.create(STAGING_LIB, recursive = TRUE)
 
-    message("Install attempt ", attempt, "/", max_attempts, " for: ", paste(remaining, collapse = ", "))
-    install.packages(remaining, lib = lib, repos = repos, type = "binary", dependencies = TRUE)
+message("Installing ", length(PACKAGES), " packages into a clean staging library (this is the slow step)...")
+install.packages(PACKAGES, lib = STAGING_LIB, repos = "https://cloud.r-project.org",
+                  type = "binary", dependencies = TRUE)
 
-    remaining <- remaining[!sapply(remaining, function(p) requireNamespace(p, lib.loc = lib, quietly = TRUE))]
-    if (length(remaining) == 0) return(character(0))
+missing_in_staging <- PACKAGES[!sapply(PACKAGES, function(p) {
+  requireNamespace(p, lib.loc = STAGING_LIB, quietly = TRUE)
+})]
+if (length(missing_in_staging) > 0) {
+  stop(
+    "These packages failed even in a clean, empty staging library — so this ",
+    "isn't the 'prior installation' conflict, it's something else entirely: ",
+    paste(missing_in_staging, collapse = ", "),
+    "\nCheck the install.packages() output above this line for the real cause."
+  )
+}
+message("All ", length(PACKAGES), " packages installed cleanly into staging.")
 
-    if (attempt < max_attempts) {
-      message(length(remaining), " package(s) still missing (", paste(remaining, collapse = ", "),
-              "). Waiting 10s for any file locks to clear before retrying...")
-      Sys.sleep(10)
-    }
+message("Copying installed packages from staging into the portable library...")
+staged_pkg_dirs <- list.dirs(STAGING_LIB, recursive = FALSE)
+copy_failures <- character(0)
+for (pkg_dir in staged_pkg_dirs) {
+  pkg_name <- basename(pkg_dir)
+  dest <- file.path(LIB_DEST, pkg_name)
+  if (dir.exists(dest)) unlink(dest, recursive = TRUE, force = TRUE)
+
+  ok <- FALSE
+  for (attempt in 1:3) {
+    ok <- isTRUE(file.copy(pkg_dir, LIB_DEST, recursive = TRUE))
+    if (ok) break
+    Sys.sleep(3)
   }
-  remaining
+  if (!ok) copy_failures <- c(copy_failures, pkg_name)
 }
 
-message("Installing ", length(PACKAGES), " packages into the portable library (this is the slow step — ggplot2/plotly/torch pull in a fair number of dependencies)...")
-still_missing <- install_with_retry(PACKAGES, LIB_DEST, "https://cloud.r-project.org")
+if (length(copy_failures) > 0) {
+  stop("Could not copy these packages from staging into the portable library: ",
+       paste(copy_failures, collapse = ", "))
+}
 
+still_missing <- PACKAGES[!sapply(PACKAGES, function(p) {
+  requireNamespace(p, lib.loc = LIB_DEST, quietly = TRUE)
+})]
 if (length(still_missing) > 0) {
-  # FIXED: instead of just naming the failed packages, actually retry each
-  # one individually with output captured, so the REAL error is printed
-  # directly in this script's own failure message — no more needing to
-  # scroll back through a long log to find it.
-  message("\n", length(still_missing), " package(s) still missing — retrying individually to capture the exact error for each...\n")
-
-  diagnostics <- character(0)
-  for (p in still_missing) {
-    msg <- tryCatch({
-      withCallingHandlers(
-        install.packages(p, lib = LIB_DEST, repos = "https://cloud.r-project.org", type = "binary"),
-        warning = function(w) {
-          diagnostics[[length(diagnostics) + 1]] <<- sprintf("[%s] WARNING: %s", p, conditionMessage(w))
-          invokeRestart("muffleWarning")
-        }
-      )
-      if (requireNamespace(p, lib.loc = LIB_DEST, quietly = TRUE)) {
-        sprintf("[%s] OK on retry", p)
-      } else {
-        sprintf("[%s] Still failed after retry — no error/warning was raised, which usually means the binary isn't available for this R version/platform combination.", p)
-      }
-    }, error = function(e) {
-      sprintf("[%s] ERROR: %s", p, conditionMessage(e))
-    })
-    diagnostics <- c(diagnostics, msg)
-  }
-
-  still_missing_after_retry <- still_missing[!sapply(still_missing, function(p) {
-    requireNamespace(p, lib.loc = LIB_DEST, quietly = TRUE)
-  })]
-
-  if (length(still_missing_after_retry) > 0) {
-    stop(
-      "These packages failed to install into the portable library even after a retry:\n",
-      paste(diagnostics, collapse = "\n"),
-      "\n\nStill missing: ", paste(still_missing_after_retry, collapse = ", ")
-    )
-  } else {
-    message("All packages installed successfully on retry.")
-  }
+  stop("These packages are missing from the final portable library after copying: ",
+       paste(still_missing, collapse = ", "))
 }
-message("All ", length(PACKAGES), " packages installed and verified.")
+unlink(STAGING_LIB, recursive = TRUE)
+message("All ", length(PACKAGES), " packages verified in the final portable library.")
 
 # ── 3. Copy the app file in ───────────────────────────────────────────────────
 all_r_files <- list.files(APP_DIR, pattern = "\\.R$", full.names = TRUE, recursive = FALSE)
