@@ -40,7 +40,32 @@ install_rinno_from_github <- function() {
 if ("RInno" %in% installed.packages()[, "Package"]) remove.packages("RInno")
 install_rinno_from_github()
 library(RInno)
+# Ensure RInno is installed
+if ("RInno" %in% installed.packages()[, "Package"]) remove.packages("RInno")
+install_rinno_from_github()
+library(RInno)
 
+# -----------------------------------------------------------------------------
+# 1.5 MONKEY-PATCH RInno to fix R 4.x.x CRAN scraping bugs
+# -----------------------------------------------------------------------------
+message("Applying RInno patches for R 4.x compatibility...")
+patch_rinno <- function() {
+  for (f in c("get_R", "code_section")) {
+    fn <- getFromNamespace(f, "RInno")
+    b <- deparse(body(fn))
+    
+    # 1. Update the hardcoded regex to support modern R versions
+    b <- gsub("\\[1-3\\]", "[1-9]", b)
+    
+    # 2. Fix the vector length > 1 crash caused by CRAN HTML updates
+    b <- gsub("latest_R_version == R_version", "latest_R_version[1] == R_version", b)
+    
+    # Reassemble and inject back into the RInno package memory
+    body(fn) <- as.call(parse(text = paste(b, collapse = "\n"))[[1]])
+    assignInNamespace(f, fn, ns = "RInno")
+  }
+}
+patch_rinno()
 # -----------------------------------------------------------------------------
 # 2. Setup Directories & Auto-detect app.R
 # -----------------------------------------------------------------------------
