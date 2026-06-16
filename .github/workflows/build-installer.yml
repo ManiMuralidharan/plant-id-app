@@ -27,14 +27,15 @@ jobs:
           echo "C:\Program Files (x86)\Inno Setup 6" >> $env:GITHUB_PATH
         shell: powershell
 
-      - name: Install other R packages (pre‑install for speed)
-        shell: Rscript {0}
-        run: |
-          install.packages(c(
-            "shiny", "bslib", "DT", "DBI", "RSQLite", "magick", "base64enc",
-            "httr", "jsonlite", "torch", "torchvision", "ggplot2", "plotly",
-            "shinycssloaders", "shinytoastr", "digest"
-          ), repos = "https://cloud.r-project.org")
+      - name: Install R package dependencies
+  shell: Rscript {0}
+  run: |
+    install.packages(c(
+      "shiny", "bslib", "DT", "DBI", "RSQLite", "magick", "base64enc",
+      "httr", "jsonlite", "torch", "torchvision", "ggplot2", "plotly",
+      "shinycssloaders", "shinytoastr", "digest",
+      "installr", "pkgbuild", "remotes"   # <-- add these three
+    ), repos = "https://cloud.r-project.org")
 
       - name: Build the installer
         shell: Rscript {0}
