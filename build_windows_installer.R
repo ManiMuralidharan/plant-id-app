@@ -73,6 +73,7 @@ patch_rinno <- function() {
   assignInNamespace("get_R", fn_getR, ns = "RInno")
 }
 patch_rinno()
+
 # -----------------------------------------------------------------------------
 # 2. Setup Directories & Auto-detect app.R
 # -----------------------------------------------------------------------------
