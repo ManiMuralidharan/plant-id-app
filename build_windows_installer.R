@@ -47,8 +47,23 @@ get_script_dir <- function() {
   getwd()
 }
 
-APP_DIR <- get_script_dir()
+# Use the environment variable set by GitHub Actions
+# or fall back to the current working directory
+APP_DIR <- Sys.getenv("GITHUB_WORKSPACE", unset = getwd())
 setwd(APP_DIR)
+
+message("Working directory set to: ", APP_DIR)
+message("Searching for app files in: ", APP_DIR)
+
+# Debug: List all files to verify
+files_found <- list.files(APP_DIR, pattern = "\\.R$", full.names = FALSE)
+message("Found R files: ", paste(files_found, collapse = ", "))
+
+candidates <- setdiff(files_found, "build_windows_installer.R")
+
+if (length(candidates) == 0) {
+  stop("No .R file found. Files present: ", paste(list.files(APP_DIR), collapse = ", "))
+}
 
 # Ensure app.R exists
 all_r_files <- list.files(APP_DIR, pattern = "\\.R$", full.names = FALSE)
