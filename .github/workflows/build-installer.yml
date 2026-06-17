@@ -1,43 +1,40 @@
-# .github/workflows/build-installer.yml
-#
-# Builds a portable Windows distribution (no installer wizard) by copying
-# the runner's own R, installing packages into that copy, and zipping the
-# result. Replaces the earlier RInno-based approach, which kept surfacing
-# bugs from an unmaintained dependency (Maintainer: ORPHANED) one at a time.
-
-name: Build Windows Portable Bundle
+name: Build Windows Installer
 
 on:
   push:
     branches: [ main, master ]
-  workflow_dispatch: {}
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: windows-latest
 
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true   # silence Node.js deprecation
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up R
+      - name: Set up R and Rtools
         uses: r-lib/actions/setup-r@v2
         with:
-          r-version: '4.5.2'
+          r-version: '4.4.0'     # <-- Changed from 4.5.2 to stable 4.4.0
+          use-public-rspm: true
+          install-r: true
+          rtools-version: '44'   # <-- Changed from 45 to 44 to match R 4.4.x
 
-      - name: Exclude workspace from Windows Defender scanning
-        # This is a well-known cause of "Permission denied" / "cannot remove
-        # prior installation" errors during R package installs on GitHub's
-        # windows-latest runners: Defender's real-time scanner locks freshly
-        # written DLLs right as another process tries to overwrite them.
+      - name: Install Inno Setup (Optional if using the Portable script instead of RInno)
+        run: |
+          choco install innosetup -y
+          echo "C:\Program Files (x86)\Inno Setup 6" >> $env:GITHUB_PATH
         shell: powershell
-        run: Add-MpPreference -ExclusionPath "${{ github.workspace }}"
 
       - name: Build the portable bundle
         shell: Rscript {0}
         run: source("build_portable_bundle.R")
 
-      - name: Upload bundle as a downloadable artifact
+      - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-portable-bundle
