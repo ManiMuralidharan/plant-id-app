@@ -43,18 +43,6 @@ if (.Platform$OS.type == "windows") {
 message("R copied successfully.")
 
 # ── 2. Install into a clean staging library, then copy into the final one ───
-# FIXED: installing directly into LIB_DEST (which already has whatever
-# robocopy brought over, plus dependency-resolution overlaps like shiny->bslib
-# and plotly->ggplot2 being both directly requested AND pulled in as a
-# dependency) means install.packages() sometimes thinks it needs to "remove a
-# prior installation" — and THAT specific code path is where the Windows
-# lock/permission errors keep happening, even with the Defender exclusion in
-# place. Installing into a totally empty staging folder first means every
-# package takes the simple "fresh install" path (nothing to remove, nothing
-# to back up/restore), which eliminates this entire class of error rather
-# than retrying into it. The staged packages are then copied into the real
-# library with a plain file copy, which has no package-replacement dance to
-# collide with.
 PACKAGES <- c(
   "shiny", "bslib", "DT", "DBI", "RSQLite", "magick", "base64enc",
   "httr", "jsonlite", "torch", "torchvision", "ggplot2", "plotly",
@@ -65,9 +53,14 @@ STAGING_LIB <- file.path(APP_DIR, "staging_library")
 if (dir.exists(STAGING_LIB)) unlink(STAGING_LIB, recursive = TRUE)
 dir.create(STAGING_LIB, recursive = TRUE)
 
+# Tell R to prioritize the staging library so it can "see" dependencies as they install
+.libPaths(c(STAGING_LIB, .libPaths()))
+
 message("Installing ", length(PACKAGES), " packages into a clean staging library (this is the slow step)...")
-install.packages(PACKAGES, lib = STAGING_LIB, repos = "https://cloud.r-project.org",
-                  type = "binary", dependencies = TRUE)
+
+# FIXED: Removed 'dependencies = TRUE' to prevent bloated failure trees.
+# FIXED: Removed hardcoded CRAN repo so GitHub Actions can use its cached RSPM binaries.
+install.packages(PACKAGES, lib = STAGING_LIB, type = "binary")
 
 missing_in_staging <- PACKAGES[!sapply(PACKAGES, function(p) {
   requireNamespace(p, lib.loc = STAGING_LIB, quietly = TRUE)
